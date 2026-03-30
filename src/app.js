@@ -16,7 +16,9 @@ const app = express();
 // Security & parsing middleware
 app.use(helmet());
 app.use(morgan('combined'));
-app.use(cors({ origin: process.env.CORS_ORIGIN || '*', credentials: true }));
+// CORS on auth service only needed for the OAuth redirect flow cookie.
+// Specific origin required — never wildcard — because frontend sends credentials.
+app.use(cors({ origin: process.env.CORS_ORIGIN, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 
@@ -45,10 +47,17 @@ app.use(passport.initialize());
 app.use('/auth', authRoutes);
 app.use('/admin/users', usersRoutes);
 
-// Health check — no auth required, used by UptimeRobot keep-alive pings
-app.get('/health', (_req, res) =>
-  res.status(200).json({ status: 'ok', service: 'auth', timestamp: new Date().toISOString() })
-);
+// Health check — pings DB to keep Supabase free tier from pausing.
+// UptimeRobot hits this every 10 min, replacing the need for cron-job.org.
+app.get('/health', async (_req, res) => {
+  try {
+    const pool = require('./db');
+    await pool.query('SELECT 1');
+    res.status(200).json({ status: 'ok', service: 'auth', timestamp: new Date().toISOString() });
+  } catch (err) {
+    res.status(503).json({ status: 'error', service: 'auth', error: 'DB unreachable' });
+  }
+});
 
 // 404 handler
 app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
