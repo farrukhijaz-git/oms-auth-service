@@ -10,8 +10,8 @@ const REFRESH_COOKIE = 'oms_refresh';
 
 const cookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'strict',
+  secure: true, // always required for SameSite=None
+  sameSite: 'none', // frontend (Vercel) and API (Render) are different origins
   maxAge: 8 * 60 * 60 * 1000, // 8 hours in ms
 };
 
@@ -36,6 +36,11 @@ function issueRefreshToken(user) {
 // ---------------------------------------------------------------------------
 router.get(
   '/google',
+  (req, res, next) => {
+    // Prevent loading in iframe - Google OAuth requires top-level navigation
+    res.setHeader('X-Frame-Options', 'DENY');
+    next();
+  },
   passport.authenticate('google', { scope: ['profile', 'email'], session: false })
 );
 
